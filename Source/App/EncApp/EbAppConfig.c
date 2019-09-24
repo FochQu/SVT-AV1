@@ -28,6 +28,7 @@
 #define OUTPUT_RECON_TOKEN              "-o"
 #define ERROR_FILE_TOKEN                "-errlog"
 #define QP_FILE_TOKEN                   "-qp-file"
+#define STAT_FILE_TOKEN                 "-stat-file"
 #define WIDTH_TOKEN                     "-w"
 #define HEIGHT_TOKEN                    "-h"
 #define NUMBER_OF_PICTURES_TOKEN        "-n"
@@ -35,6 +36,7 @@
 #define BASE_LAYER_SWITCH_MODE_TOKEN    "-base-layer-switch-mode" // no Eval
 #define QP_TOKEN                        "-q"
 #define USE_QP_FILE_TOKEN               "-use-q-file"
+#define STAT_REPORT_TOKEN               "-stat-report"
 #define FRAME_RATE_TOKEN                "-fps"
 #define FRAME_RATE_NUMERATOR_TOKEN      "-fps-num"
 #define FRAME_RATE_DENOMINATOR_TOKEN    "-fps-denom"
@@ -81,6 +83,7 @@
 #define ALTREF_NFRAMES                  "-altref-nframes"
 #define ENABLE_OVERLAYS                 "-enable-overlays"
 // --- end: ALTREF_FILTERING_SUPPORT
+#define HBD_MD_ENABLE_TOKEN             "-hbd-md"
 #define CONSTRAINED_INTRA_ENABLE_TOKEN  "-constrd-intra"
 #define IMPROVE_SHARPNESS_TOKEN         "-sharp"
 #define HDR_INPUT_TOKEN                 "-hdr"
@@ -88,6 +91,7 @@
 #define TARGET_BIT_RATE_TOKEN           "-tbr"
 #define MAX_QP_TOKEN                    "-max-qp"
 #define MIN_QP_TOKEN                    "-min-qp"
+#define ADAPTIVE_QP_ENABLE_TOKEN        "-adaptive-quantization"
 #define LOOK_AHEAD_DIST_TOKEN           "-lad"
 #define SUPER_BLOCK_SIZE_TOKEN          "-sb-size"
 #define TILE_ROW_TOKEN                   "-tile-rows"
@@ -156,6 +160,12 @@ static void SetCfgQpFile                        (const char *value, EbConfig *cf
     if (cfg->qp_file) { fclose(cfg->qp_file); }
     FOPEN(cfg->qp_file,value, "r");
 };
+static void SetCfgStatFile(const char *value, EbConfig *cfg)
+{
+    if (cfg->stat_file) { fclose(cfg->stat_file); }
+    FOPEN(cfg->stat_file, value, "wb");
+};
+static void SetStatReport                       (const char *value, EbConfig *cfg) {cfg->stat_report = (uint8_t) strtoul(value, NULL, 0);};
 static void SetCfgSourceWidth                   (const char *value, EbConfig *cfg) {cfg->source_width = strtoul(value, NULL, 0);};
 static void SetInterlacedVideo                  (const char *value, EbConfig *cfg) {cfg->interlaced_video  = (EbBool) strtoul(value, NULL, 0);};
 static void SetSeperateFields                   (const char *value, EbConfig *cfg) {cfg->separate_fields = (EbBool) strtoul(value, NULL, 0);};
@@ -197,6 +207,7 @@ static void SetRateControlMode                  (const char *value, EbConfig *cf
 static void SetTargetBitRate                    (const char *value, EbConfig *cfg) {cfg->target_bit_rate = strtoul(value, NULL, 0);};
 static void SetMaxQpAllowed                     (const char *value, EbConfig *cfg) {cfg->max_qp_allowed = strtoul(value, NULL, 0);};
 static void SetMinQpAllowed                     (const char *value, EbConfig *cfg) {cfg->min_qp_allowed = strtoul(value, NULL, 0);};
+static void SetAdaptiveQuantization             (const char *value, EbConfig *cfg) {cfg->enable_adaptive_quantization = (EbBool)strtol(value,  NULL, 0);};
 static void SetEnableHmeLevel1Flag              (const char *value, EbConfig *cfg) {cfg->enable_hme_level1_flag  = (EbBool)strtoul(value, NULL, 0);};
 static void SetEnableHmeLevel2Flag              (const char *value, EbConfig *cfg) {cfg->enable_hme_level2_flag  = (EbBool)strtoul(value, NULL, 0);};
 static void SetCfgSearchAreaWidth               (const char *value, EbConfig *cfg) {cfg->search_area_width = strtoul(value, NULL, 0);};
@@ -217,16 +228,18 @@ static void SetHmeLevel2SearchAreaInHeightArray (const char *value, EbConfig *cf
 static void SetScreenContentMode                (const char *value, EbConfig *cfg) {cfg->screen_content_mode                                                 = strtoul(value, NULL, 0);};
 // --- start: ALTREF_FILTERING_SUPPORT
 static void SetEnableAltRefs                    (const char *value, EbConfig *cfg) {cfg->enable_altrefs = (EbBool)strtoul(value, NULL, 0);};
-static void SetAltRefStrength                   (const char *value, EbConfig *cfg) {cfg->altref_strength = strtoul(value, NULL, 0);};
-static void SetAltRefNFrames                    (const char *value, EbConfig *cfg) {cfg->altref_nframes = strtoul(value, NULL, 0);};
+static void SetAltRefStrength                   (const char *value, EbConfig *cfg) {cfg->altref_strength = (uint8_t)strtoul(value, NULL, 0);};
+static void SetAltRefNFrames                    (const char *value, EbConfig *cfg) {cfg->altref_nframes = (uint8_t)strtoul(value, NULL, 0);};
 static void SetEnableOverlays                   (const char *value, EbConfig *cfg) { cfg->enable_overlays = (EbBool)strtoul(value, NULL, 0); };
 // --- end: ALTREF_FILTERING_SUPPORT
+static void SetEnableHBDModeDecision            (const char *value, EbConfig *cfg) {cfg->enable_hbd_mode_decision = (EbBool)strtoul(value, NULL, 0);};
 static void SetEnableConstrainedIntra           (const char *value, EbConfig *cfg) {cfg->constrained_intra                                             = (EbBool)strtoul(value, NULL, 0);};
 static void SetImproveSharpness                 (const char *value, EbConfig *cfg) {cfg->improve_sharpness               = (EbBool)strtol(value,  NULL, 0);};
 static void SetHighDynamicRangeInput            (const char *value, EbConfig *cfg) {cfg->high_dynamic_range_input            = strtol(value,  NULL, 0);};
 static void SetProfile                          (const char *value, EbConfig *cfg) {cfg->profile                          = strtol(value,  NULL, 0);};
 static void SetTier                             (const char *value, EbConfig *cfg) {cfg->tier                             = strtol(value,  NULL, 0);};
 static void SetLevel                            (const char *value, EbConfig *cfg) {
+
     if (strtoul( value, NULL,0) != 0 || EB_STRCMP(value, "0") == 0 )
         cfg->level = (uint32_t)(10*strtod(value,  NULL));
     else
@@ -271,6 +284,8 @@ config_entry_t config_entry[] = {
     { SINGLE_INPUT, ERROR_FILE_TOKEN, "ErrorFile", SetCfgErrorFile },
     { SINGLE_INPUT, OUTPUT_RECON_TOKEN, "ReconFile", SetCfgReconFile },
     { SINGLE_INPUT, QP_FILE_TOKEN, "QpFile", SetCfgQpFile },
+    { SINGLE_INPUT, STAT_FILE_TOKEN, "StatFile", SetCfgStatFile },
+
     // Interlaced Video
     { SINGLE_INPUT, INTERLACED_VIDEO_TOKEN , "InterlacedVideo" , SetInterlacedVideo },
     { SINGLE_INPUT, SEPERATE_FILDS_TOKEN, "SeperateFields", SetSeperateFields },
@@ -298,11 +313,14 @@ config_entry_t config_entry[] = {
     { SINGLE_INPUT, SCENE_CHANGE_DETECTION_TOKEN, "SceneChangeDetection", SetSceneChangeDetection},
     { SINGLE_INPUT, QP_TOKEN, "QP", SetCfgQp },
     { SINGLE_INPUT, USE_QP_FILE_TOKEN, "UseQpFile", SetCfgUseQpFile },
+    { SINGLE_INPUT, STAT_REPORT_TOKEN, "StatReport", SetStatReport },
     { SINGLE_INPUT, RATE_CONTROL_ENABLE_TOKEN, "RateControlMode", SetRateControlMode },
     { SINGLE_INPUT, LOOK_AHEAD_DIST_TOKEN, "LookAheadDistance",                             SetLookAheadDistance},
     { SINGLE_INPUT, TARGET_BIT_RATE_TOKEN, "TargetBitRate", SetTargetBitRate },
     { SINGLE_INPUT, MAX_QP_TOKEN, "MaxQpAllowed", SetMaxQpAllowed },
     { SINGLE_INPUT, MIN_QP_TOKEN, "MinQpAllowed", SetMinQpAllowed },
+    { SINGLE_INPUT, ADAPTIVE_QP_ENABLE_TOKEN, "AdaptiveQuantization", SetAdaptiveQuantization },
+
     // DLF
     { SINGLE_INPUT, LOOP_FILTER_DISABLE_TOKEN, "LoopFilterDisable", SetDisableDlfFlag },
     // LOCAL WARPED MOTION
@@ -325,6 +343,7 @@ config_entry_t config_entry[] = {
     { SINGLE_INPUT, HME_SRCH_T_L0_HEIGHT_TOKEN, "HmeLevel0TotalSearchAreaHeight", SetCfgHmeLevel0TotalSearchAreaHeight },
     // MD Parameters
     { SINGLE_INPUT, SCREEN_CONTENT_TOKEN, "ScreenContentMode", SetScreenContentMode},
+    { SINGLE_INPUT, HBD_MD_ENABLE_TOKEN, "HighBitDepthModeDecision", SetEnableHBDModeDecision },
     { SINGLE_INPUT, CONSTRAINED_INTRA_ENABLE_TOKEN, "ConstrainedIntra", SetEnableConstrainedIntra},
     // Thread Management
     { SINGLE_INPUT, THREAD_MGMNT, "logicalProcessors", SetLogicalProcessors },
@@ -375,6 +394,7 @@ void eb_config_ctor(EbConfig *config_ptr)
     config_ptr->recon_file                            = NULL;
     config_ptr->error_log_file                         = stderr;
     config_ptr->qp_file                               = NULL;
+    config_ptr->stat_file                             = NULL;
 
     config_ptr->frame_rate                            = 30 << 16;
     config_ptr->frame_rate_numerator                   = 0;
@@ -396,17 +416,16 @@ void eb_config_ctor(EbConfig *config_ptr)
     config_ptr->separate_fields                       = EB_FALSE;
     config_ptr->qp                                   = 50;
     config_ptr->use_qp_file                          = EB_FALSE;
+    config_ptr->stat_report                          = 0;
 
     config_ptr->scene_change_detection               = 0;
     config_ptr->rate_control_mode                      = 0;
     config_ptr->look_ahead_distance                  = (uint32_t)~0;
     config_ptr->target_bit_rate                        = 7000000;
     config_ptr->max_qp_allowed                       = 63;
-#if 1 //RC
     config_ptr->min_qp_allowed                       = 10;
-#else
-    config_ptr->min_qp_allowed                       = 0;
-#endif
+
+    config_ptr->enable_adaptive_quantization         = EB_FALSE;
     config_ptr->base_layer_switch_mode               = 0;
     config_ptr->enc_mode                              = MAX_ENC_PRESET;
     config_ptr->intra_period                          = -2;
@@ -447,6 +466,7 @@ void eb_config_ctor(EbConfig *config_ptr)
     config_ptr->hme_level2_search_area_in_height_array[0]  = 1;
     config_ptr->hme_level2_search_area_in_height_array[1]  = 1;
     config_ptr->screen_content_mode                  = 2;
+    config_ptr->enable_hbd_mode_decision             = EB_FALSE;
     config_ptr->constrained_intra                    = 0;
     config_ptr->film_grain_denoise_strength          = 0;
 
@@ -478,13 +498,17 @@ void eb_config_ctor(EbConfig *config_ptr)
     config_ptr->performance_context.total_execution_time = 0;
     config_ptr->performance_context.total_encode_time    = 0;
 
-    config_ptr->performance_context.frame_count        = 0;
-    config_ptr->performance_context.average_speed      = 0;
-    config_ptr->performance_context.starts_time        = 0;
-    config_ptr->performance_context.startu_time        = 0;
-    config_ptr->performance_context.max_latency        = 0;
-    config_ptr->performance_context.total_latency      = 0;
-    config_ptr->performance_context.byte_count         = 0;
+    config_ptr->performance_context.frame_count         = 0;
+    config_ptr->performance_context.average_speed       = 0;
+    config_ptr->performance_context.starts_time         = 0;
+    config_ptr->performance_context.startu_time         = 0;
+    config_ptr->performance_context.max_latency         = 0;
+    config_ptr->performance_context.total_latency       = 0;
+    config_ptr->performance_context.byte_count          = 0;
+    config_ptr->performance_context.sum_luma_psnr       = 0;
+    config_ptr->performance_context.sum_cr_psnr         = 0;
+    config_ptr->performance_context.sum_cb_psnr         = 0;
+    config_ptr->performance_context.sum_qp              = 0;
 
     // ASM Type
     config_ptr->asm_type                              = 1;
@@ -546,6 +570,10 @@ void eb_config_dtor(EbConfig *config_ptr)
         config_ptr->qp_file = (FILE *)NULL;
     }
 
+    if (config_ptr->stat_file) {
+        fclose(config_ptr->stat_file);
+        config_ptr->stat_file = (FILE *) NULL;
+    }
     return;
 }
 
@@ -612,11 +640,8 @@ static void lineSplit(
 /**********************************
 * Set Config value
 **********************************/
-static void SetConfigValue(
-    EbConfig *config,
-    char       *name,
-    char       *value)
-{
+static void SetConfigValue(EbConfig *config, const char *name,
+                           const char *value) {
     int32_t i=0;
 
     while(config_entry[i].name != NULL) {
@@ -827,18 +852,13 @@ static EbErrorType VerifySettings(EbConfig *config, uint32_t channelNumber)
         return_error = EB_ErrorBadParameter;
     }
 
-    // --- start: ALTREF_FILTERING_SUPPORT
-    // alt-ref frames related
-    if (config->altref_strength > 6 ) {
-        fprintf(config->error_log_file, "Error instance %u: invalid altref-strength, should be in the range [0 - 6] \n",channelNumber+1);
+    // HBD mode decision
+    if (config->enable_hbd_mode_decision != 0 && config->enable_hbd_mode_decision != 1) {
+        fprintf(config->error_log_file, "Error instance %u: Invalid HBD mode decision flag [0 - 1], your input: %d\n", channelNumber + 1, config->target_socket);
         return_error = EB_ErrorBadParameter;
     }
-
-    if (config->altref_nframes > 7 ) {
-        fprintf(config->error_log_file, "Error instance %u: invalid altref-nframes, should be in the range [0 - 7] \n",channelNumber+1);
-        return_error = EB_ErrorBadParameter;
-    }
-    // --- end: ALTREF_FILTERING_SUPPORT
+    if (config->enable_hbd_mode_decision == 1 && config->encoder_bit_depth != 10)
+        config->enable_hbd_mode_decision = 0;
 
     return return_error;
 }

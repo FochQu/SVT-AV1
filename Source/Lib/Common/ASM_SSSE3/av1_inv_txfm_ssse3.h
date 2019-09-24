@@ -86,10 +86,6 @@ extern "C" {
       IIDENTITY_1D, IADST_1D,     IIDENTITY_1D, IFLIPADST_1D,
     };
 
-    // Sqrt2, Sqrt2^2, Sqrt2^3, Sqrt2^4, Sqrt2^5
-    static int32_t NewSqrt2list[TX_SIZES] = { 5793, 2 * 4096, 2 * 5793, 4 * 4096,
-                                              4 * 5793 };
-
     DECLARE_ALIGNED(16, static const int16_t, av1_eob_to_eobxy_8x8_default[8]) = {
       0x0707, 0x0707, 0x0707, 0x0707, 0x0707, 0x0707, 0x0707, 0x0707,
     };
@@ -218,7 +214,7 @@ av1_eob_to_eobxy_32x16_default,
     typedef void(*transform_1d_ssse3)(const __m128i *input, __m128i *output,
         int8_t cos_bit);
 
-    void av1_lowbd_inv_txfm2d_add_ssse3(const int32_t *input, uint8_t *output,
+    void eb_av1_lowbd_inv_txfm2d_add_ssse3(const int32_t *input, uint8_t *output,
         int32_t stride, TxType tx_type,
         TxSize tx_size, int32_t eob);
 #ifdef __cplusplus

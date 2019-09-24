@@ -9,23 +9,14 @@
 #include "EbDefinitions.h"
 #include "EbMdRateEstimation.h"
 #include "EbCodingUnit.h"
+#include "EbObject.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 // Max Search Area
-#if SCREEN_CONTENT_SETTINGS
-#if REDUCE_ME_SEARCH_AREA
 #define MAX_SEARCH_AREA_WIDTH       1280
 #define MAX_SEARCH_AREA_HEIGHT      1280
-#else
-#define MAX_SEARCH_AREA_WIDTH       MAX_PICTURE_WIDTH_SIZE  + (PAD_VALUE << 1)
-#define MAX_SEARCH_AREA_HEIGHT      MAX_PICTURE_HEIGHT_SIZE + (PAD_VALUE << 1)
-#endif
-#else
-#define MAX_SEARCH_AREA_WIDTH       1350 // This should be a function for the MAX HME L0 * the multiplications per layers and per Hierarchichal structures
-#define MAX_SEARCH_AREA_HEIGHT      675 // This should be a function for the MAX HME L0 * the multiplications per layers and per Hierarchichal structures
-#endif
 #define MAX_SEARCH_AREA_WIDTH_CH       MAX_SEARCH_AREA_WIDTH  + PAD_VALUE
 #define MAX_SEARCH_AREA_HEIGHT_CH      MAX_SEARCH_AREA_HEIGHT  + PAD_VALUE
 
@@ -279,6 +270,7 @@ extern "C" {
 
     typedef struct IntraReferenceSamplesOpenLoop
     {
+        EbDctor                  dctor;
         uint8_t                  *y_intra_reference_array;
         uint8_t                  *y_intra_reference_array_reverse;
 
@@ -291,18 +283,11 @@ extern "C" {
 
     typedef struct MePredUnit
     {
-#if MRP_ME
         uint8_t          ref_index[MAX_NUM_OF_REF_PIC_LIST];
-#endif
-#if MRP_MD_UNI_DIR_BIPRED
         uint8_t          ref0_list;
         uint8_t          ref1_list;
-#endif
         uint32_t         distortion;
         EbPredDirection  prediction_direction;
-#if !MEMORY_FOOTPRINT_OPT_ME_MV
-        uint32_t         mv[MAX_NUM_OF_REF_PIC_LIST];
-#endif
     } MePredUnit;
 
     typedef struct MotionEstimationTierZero {
@@ -311,14 +296,11 @@ extern "C" {
 
     typedef struct MeContext
     {
+        EbDctor                       dctor;
         // Search region stride
         uint32_t                      interpolated_stride;
         uint32_t                      interpolated_full_stride[MAX_NUM_OF_REF_PIC_LIST][MAX_REF_IDX];
-#if MEMORY_FOOTPRINT_OPT_ME_MV
         MotionEstimationTierZero     *me_candidate;
-#else
-        MotionEstimationTierZero    me_candidate[MAX_ME_CANDIDATE_PER_PU];
-#endif
         // Intermediate LCU-sized buffer to retain the input samples
         uint8_t                      *sb_buffer;
         uint8_t                      *sb_buffer_ptr;
@@ -366,9 +348,9 @@ extern "C" {
         uint32_t                     *p_best_mv8x32;
         uint32_t                     *p_best_mv64x16;
         uint32_t                     *p_best_mv16x64;
-        uint32_t                      p_sad32x32[4];
-        uint32_t                      p_sad16x16[16];
-        uint32_t                      p_sad8x8[64];
+        EB_ALIGN(16) uint32_t         p_sad32x32[4];
+        EB_ALIGN(64) uint32_t         p_sad16x16[16];
+        EB_ALIGN(64) uint32_t         p_sad8x8[64];
 
         uint8_t                       psub_pel_direction64x64;
         uint8_t                       psub_pel_direction32x32[4];
@@ -388,7 +370,22 @@ extern "C" {
         uint32_t                      p_sb_best_sad[MAX_NUM_OF_REF_PIC_LIST][MAX_REF_IDX][MAX_ME_PU_COUNT];
         uint32_t                      p_sb_best_mv[MAX_NUM_OF_REF_PIC_LIST][MAX_REF_IDX][MAX_ME_PU_COUNT];
         uint32_t                      p_sb_bipred_sad[MAX_ME_PU_COUNT];//needs to be upgraded to 209 pus
-
+        uint32_t                      p_sb_best_full_pel_mv[MAX_NUM_OF_REF_PIC_LIST][MAX_REF_IDX][MAX_ME_PU_COUNT];
+        uint32_t                      *p_best_full_pel_mv8x8;
+        uint32_t                      *p_best_full_pel_mv16x16;
+        uint32_t                      *p_best_full_pel_mv32x32;
+        uint32_t                      *p_best_full_pel_mv64x64;
+        uint32_t                      *p_best_full_pel_mv64x32;
+        uint32_t                      *p_best_full_pel_mv32x16;
+        uint32_t                      *p_best_full_pel_mv16x8;
+        uint32_t                      *p_best_full_pel_mv32x64;
+        uint32_t                      *p_best_full_pel_mv16x32;
+        uint32_t                      *p_best_full_pel_mv8x16;
+        uint32_t                      *p_best_full_pel_mv32x8;
+        uint32_t                      *p_best_full_pel_mv8x32;
+        uint32_t                      *p_best_full_pel_mv64x16;
+        uint32_t                      *p_best_full_pel_mv16x64;
+        uint8_t                       full_quarter_pel_refinement;
         uint32_t                      p_sb_best_ssd[MAX_NUM_OF_REF_PIC_LIST][MAX_REF_IDX][MAX_ME_PU_COUNT];
         uint32_t                     *p_best_ssd8x8;
         uint32_t                     *p_best_ssd16x16;
@@ -411,11 +408,9 @@ extern "C" {
         uint8_t                     *p_best_nsq32x32;
         uint8_t                     *p_best_nsq64x64;
         uint16_t                     *p_eight_pos_sad16x16;
-#if NSQ_ME_OPT
-        uint32_t                      p_eight_sad32x32[4][8];
-        uint32_t                      p_eight_sad16x16[16][8];
-        uint32_t                      p_eight_sad8x8[64][8];
-#endif
+        EB_ALIGN(64) uint32_t         p_eight_sad32x32[4][8];
+        EB_ALIGN(64) uint32_t         p_eight_sad16x16[16][8];
+        EB_ALIGN(64) uint32_t         p_eight_sad8x8[64][8];
         EbBitFraction               *mvd_bits_array;
         uint64_t                      lambda;
         uint8_t                       hme_search_type;
@@ -423,19 +418,22 @@ extern "C" {
         uint8_t   fractional_search_method;
         EbBool                        fractional_search64x64;
 
-#if M9_SUBPEL_SELECTION
         uint8_t                       fractional_search_model;
-#endif
         uint8_t                       hme_search_method;
         uint8_t                       me_search_method;
+
+        EbBool                        enable_hme_flag;
+        EbBool                        enable_hme_level0_flag;
+        EbBool                        enable_hme_level1_flag;
+        EbBool                        enable_hme_level2_flag;
+
+        EbBool                        use_subpel_flag;
+        EbBool                        half_pel_mode;
+        EbBool                        quarter_pel_mode;
+
         // ME
-#if QUICK_ME_CLEANUP
         uint16_t                      search_area_width;
         uint16_t                      search_area_height;
-#else
-        uint8_t                       search_area_width;
-        uint8_t                       search_area_height;
-#endif
         // HME
         uint16_t                      number_hme_search_region_in_width;
         uint16_t                      number_hme_search_region_in_height;
@@ -449,26 +447,21 @@ extern "C" {
         uint16_t                      hme_level2_search_area_in_height_array[EB_HME_SEARCH_AREA_ROW_MAX_COUNT];
         uint8_t                       update_hme_search_center_flag;
 
-#if ALTREF_FILTERING_SUPPORT
         // ------- Context for Alt-Ref ME ------
         uint16_t                      adj_search_area_width;
         uint16_t                      adj_search_area_height;
         EbBool                        me_alt_ref;
         void                          *alt_ref_reference_ptr;
         // -------
-#endif
     } MeContext;
 
     typedef struct SsMeContext
     {
+        EbDctor                       dctor;
         // Search region stride
         uint32_t                      interpolated_stride;
         uint32_t                      interpolated_full_stride[MAX_NUM_OF_REF_PIC_LIST][MAX_REF_IDX];
-#if MEMORY_FOOTPRINT_OPT_ME_MV
         MotionEstimationTierZero     *me_candidate;
-#else
-        MotionEstimationTierZero    me_candidate[MAX_ME_CANDIDATE_PER_PU];
-#endif
         // Intermediate LCU-sized buffer to retain the input samples
         uint8_t                      *sb_buffer;
         uint8_t                      *sb_buffer_ptr;
@@ -605,6 +598,10 @@ extern "C" {
         uint8_t                       hme_search_type;
         uint8_t                       fractional_search_method;
 
+        EbBool                        use_subpel_flag;
+        EbBool                        half_pel_mode;
+        EbBool                        quarter_pel_mode;
+
         // ME
         uint8_t                       search_area_width;
         uint8_t                       search_area_height;
@@ -621,19 +618,12 @@ extern "C" {
         uint32_t                     width,
         uint32_t                     height);
 
-#if MEMORY_FOOTPRINT_OPT_ME_MV
     extern EbErrorType me_context_ctor(
-        MeContext     **object_dbl_ptr,
-#if REDUCE_ME_SEARCH_AREA
+        MeContext     *object_ptr,
         uint16_t        max_input_luma_width,
         uint16_t        max_input_luma_height,
-#endif
         uint8_t         nsq_present,
         uint8_t         mrp_mode);
-#else
-    extern EbErrorType me_context_ctor(
-        MeContext     **object_dbl_ptr);
-#endif
 
 #ifdef __cplusplus
 }

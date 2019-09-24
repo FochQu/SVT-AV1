@@ -153,6 +153,11 @@ typedef struct EbPerformanceContext {
     double                    average_latency;
 
     uint64_t                  byte_count;
+    double                    sum_luma_psnr;
+    double                    sum_cr_psnr;
+    double                    sum_cb_psnr;
+    uint64_t                  sum_qp;
+
 }EbPerformanceContext;
 
 typedef struct EbConfig
@@ -165,6 +170,7 @@ typedef struct EbConfig
     FILE                    *bitstream_file;
     FILE                    *recon_file;
     FILE                    *error_log_file;
+    FILE                    *stat_file;
     FILE                    *buffer_file;
 
     FILE                    *qp_file;
@@ -173,6 +179,7 @@ typedef struct EbConfig
     unsigned char           y4m_buf[9];
 
     EbBool                  use_qp_file;
+    uint8_t                  stat_report;
 
     uint32_t                 frame_rate;
     uint32_t                 frame_rate_numerator;
@@ -272,6 +279,7 @@ typedef struct EbConfig
      * MD Parameters
      ****************************************/
     EbBool                  constrained_intra;
+    EbBool                  enable_hbd_mode_decision;
 
     int32_t                  tile_columns;
     int32_t                  tile_rows;
@@ -285,6 +293,8 @@ typedef struct EbConfig
     uint32_t                 target_bit_rate;
     uint32_t                 max_qp_allowed;
     uint32_t                 min_qp_allowed;
+
+    EbBool                 enable_adaptive_quantization;
 
     /****************************************
      * Optional Features

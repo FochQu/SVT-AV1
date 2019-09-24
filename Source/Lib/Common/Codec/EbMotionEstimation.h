@@ -19,8 +19,6 @@
 extern "C" {
 #endif
 
-#if ALTREF_FILTERING_SUPPORT
-
 void uni_pred_averaging(
         uint32_t              pu_index,
         EbBool                chroma,
@@ -52,8 +50,6 @@ void interpolate_search_region_AVC_chroma(
         uint32_t                input_bit_depth,
         EbAsm                   asm_type);
 
-#endif
-
     extern EbErrorType motion_estimate_lcu(
         PictureParentControlSet   *picture_control_set_ptr,
         uint32_t                       sb_index,
@@ -69,6 +65,15 @@ void interpolate_search_region_AVC_chroma(
         EbPictureBufferDesc       *input_ptr,
         EbAsm                       asm_type);
     extern void decimation_2d(
+        uint8_t                   *input_samples,
+        uint32_t                   input_stride,
+        uint32_t                   input_area_width,
+        uint32_t                   input_area_height,
+        uint8_t                   *decim_samples,
+        uint32_t                   decim_stride,
+        uint32_t                   decim_step);
+
+    extern void downsample_2d(
         uint8_t                   *input_samples,
         uint32_t                   input_stride,
         uint32_t                   input_area_width,
@@ -106,7 +111,7 @@ void interpolate_search_region_AVC_chroma(
 #define F0 0
 #define F1 1
 #define F2 2
-
+#define MAX_SSE_VALUE 128 * 128 * 255 * 255
 #define  MAX_SAD_VALUE 128*128*255
 
 // Interpolation Filters
@@ -1552,6 +1557,25 @@ void interpolate_search_region_AVC_chroma(
         const BlockGeom *blk_geom,
         uint32_t         geom_offset_x,
         uint32_t         geom_offset_y);
+    void half_pel_refinement_sb(
+        PictureParentControlSet *picture_control_set_ptr,
+        MeContext *context_ptr,  // input/output parameter, ME context Ptr, used
+                                 // to get/update ME results
+        uint8_t *refBuffer, uint32_t ref_stride,
+        uint8_t *pos_b_buffer,  // input parameter, position "b" interpolated
+                                // search area Ptr
+        uint8_t *pos_h_buffer,  // input parameter, position "h" interpolated
+                                // search area Ptr
+        uint8_t *pos_j_buffer,  // input parameter, position "j" interpolated
+                                // search area Ptr
+        int16_t x_search_area_origin,  // input parameter, search area origin in
+                                       // the horizontal direction, used to
+                                       // point to reference samples
+        int16_t y_search_area_origin,  // input parameter, search area origin in
+                                       // the vertical direction, used to point
+                                       // to reference samples
+        uint32_t integer_mv,           // input parameter, integer MV
+        EbAsm asm_type);
 
 #ifdef __cplusplus
 }

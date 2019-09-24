@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
+#include <math.h>
 #include "EbAppContext.h"
 #include "EbAppConfig.h"
 #include "EbSvtAv1ErrorCodes.h"
@@ -1104,6 +1104,64 @@ static void write_ivf_frame_header(EbConfig *config, uint32_t byte_count){
         fwrite(header, 1, IVF_FRAME_HEADER_SIZE, config->bitstream_file);
 }
 
+/***************************************
+* Process Output STATISTICS Buffer
+***************************************/
+void process_output_statistics_buffer(
+    EbBufferHeaderType      *header_ptr,
+    EbConfig                *config){
+
+    uint32_t    max_luma_value = (config->encoder_bit_depth == 8) ? 255 : 1023;
+    uint64_t    picture_stream_size, luma_sse, cr_sse, cb_sse, picture_number, picture_qp;
+    double      temp_var, luma_psnr, cb_psnr, cr_psnr;
+
+    picture_stream_size  = header_ptr->n_filled_len;
+    luma_sse             = header_ptr->luma_sse;
+    cr_sse               = header_ptr->cr_sse;
+    cb_sse               = header_ptr->cb_sse;
+    picture_number       = header_ptr->pts;
+    picture_qp           = header_ptr->qp;
+
+    temp_var = (double)max_luma_value*max_luma_value *
+             (config->source_width*config->source_height);
+
+    if (luma_sse == 0)
+        luma_psnr = 100;
+    else
+        luma_psnr = 10 * log10((double)temp_var / (double)luma_sse);
+
+    temp_var = (double) max_luma_value * max_luma_value *
+            (config->source_width / 2 * config->source_height / 2);
+
+    if (cb_sse == 0)
+        cb_psnr = 100;
+    else
+        cb_psnr = 10 * log10((double)temp_var / (double)cb_sse);
+
+    if (cr_sse == 0)
+        cr_psnr = 100;
+    else
+        cr_psnr = 10 * log10((double)temp_var / (double)cr_sse);
+
+    config->performance_context.sum_luma_psnr += luma_psnr;
+    config->performance_context.sum_cr_psnr   += cr_psnr;
+    config->performance_context.sum_cb_psnr   += cb_psnr;
+    config->performance_context.sum_qp        += picture_qp;
+
+    // Write statistic Data to file
+    if (config->stat_file)
+        fprintf(config->stat_file, "Picture Number: %4d\t QP: %4d [Y: %.2f dB, U: %.2f dB, V: %.2f dB]\t %6d bits\n",
+        (int)picture_number,
+        (int)picture_qp,
+        luma_psnr,
+        cr_psnr,
+        cb_psnr,
+        (int)picture_stream_size);
+
+    return;
+}
+
+
 AppExitConditionType ProcessOutputStreamBuffer(
     EbConfig             *config,
     EbAppContext         *appCallBack,
@@ -1126,11 +1184,9 @@ AppExitConditionType ProcessOutputStreamBuffer(
     // Local variables
     uint64_t                finishsTime     = 0;
     uint64_t                finishuTime     = 0;
-#if ALT_REF_OVERLAY_APP
     uint8_t is_alt_ref = 1;
     while (is_alt_ref) {
         is_alt_ref = 0;
-#endif
         // non-blocking call until all input frames are sent
         stream_status = eb_svt_get_packet(componentHandle, &headerPtr, pic_send_done);
 
@@ -1142,22 +1198,18 @@ AppExitConditionType ProcessOutputStreamBuffer(
             return APP_ExitConditionError;
         }
         else if (stream_status != EB_NoErrorEmptyQueue) {
-#if ALT_REF_OVERLAY_APP
             is_alt_ref = (headerPtr->flags & EB_BUFFERFLAG_IS_ALT_REF);
-#endif
             EbBool   has_tiles = (EbBool)(appCallBack->eb_enc_parameters.tile_columns || appCallBack->eb_enc_parameters.tile_rows);
             uint8_t  obu_frame_header_size = has_tiles ? OBU_FRAME_HEADER_SIZE + 1 : OBU_FRAME_HEADER_SIZE;
-#if ALT_REF_OVERLAY_APP
             if (!(headerPtr->flags & EB_BUFFERFLAG_IS_ALT_REF))
-#endif
                 ++(config->performance_context.frame_count);
             *total_latency += (uint64_t)headerPtr->n_tick_count;
             *max_latency = (headerPtr->n_tick_count > *max_latency) ? headerPtr->n_tick_count : *max_latency;
 
-            EbFinishTime((uint64_t*)&finishsTime, (uint64_t*)&finishuTime);
+            FinishTime((uint64_t*)&finishsTime, (uint64_t*)&finishuTime);
 
             // total execution time, inc init time
-            EbComputeOverallElapsedTime(
+            ComputeOverallElapsedTime(
                 config->performance_context.lib_start_time[0],
                 config->performance_context.lib_start_time[1],
                 finishsTime,
@@ -1165,7 +1217,7 @@ AppExitConditionType ProcessOutputStreamBuffer(
                 &config->performance_context.total_execution_time);
 
             // total encode time
-            EbComputeOverallElapsedTime(
+            ComputeOverallElapsedTime(
                 config->performance_context.encode_start_time[0],
                 config->performance_context.encode_start_time[1],
                 finishsTime,
@@ -1174,11 +1226,7 @@ AppExitConditionType ProcessOutputStreamBuffer(
 
             // Write Stream Data to file
             if (streamFile) {
-#if ALT_REF_OVERLAY_APP
                 if (config->performance_context.frame_count ==  1 && !(headerPtr->flags & EB_BUFFERFLAG_IS_ALT_REF)){
-#else
-                if (config->performance_context.frame_count == 1) {
-#endif
                     write_ivf_stream_header(config);
                 }
 
@@ -1237,6 +1285,9 @@ AppExitConditionType ProcessOutputStreamBuffer(
             }
             config->performance_context.byte_count += headerPtr->n_filled_len;
 
+            if (config->stat_report && !(headerPtr->flags & EB_BUFFERFLAG_IS_ALT_REF))
+                process_output_statistics_buffer(headerPtr, config);
+
             // Update Output Port Activity State
             *portState = (headerPtr->flags & EB_BUFFERFLAG_EOS) ? APP_PortInactive : *portState;
             return_value = (headerPtr->flags & EB_BUFFERFLAG_EOS) ? APP_ExitConditionFinished : APP_ExitConditionNone;
@@ -1248,9 +1299,7 @@ AppExitConditionType ProcessOutputStreamBuffer(
             ++frame_count;
 #else
             //++frame_count;
-#if ALT_REF_OVERLAY_APP
             if (!(headerPtr->flags & EB_BUFFERFLAG_IS_ALT_REF))
-#endif
                 printf("\b\b\b\b\b\b\b\b\b%9d", ++frame_count);
 #endif
 
@@ -1269,9 +1318,7 @@ AppExitConditionType ProcessOutputStreamBuffer(
                 }
             }
         }
-#if ALT_REF_OVERLAY_APP
     }
-#endif
     return return_value;
 }
 AppExitConditionType ProcessOutputReconBuffer(

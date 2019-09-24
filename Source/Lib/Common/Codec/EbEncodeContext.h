@@ -21,6 +21,7 @@
 #include "EbMdRateEstimation.h"
 #include "EbPredictionStructure.h"
 #include "EbRateControlTables.h"
+#include "EbObject.h"
 
 // *Note - the queues are small for testing purposes.  They should be increased when they are done.
 #define PRE_ASSIGNMENT_MAX_DEPTH                            128     // should be large enough to hold an entire prediction period
@@ -42,6 +43,7 @@
 
 typedef struct EncodeContext
 {
+    EbDctor                                        dctor;
     // Callback Functions
     EbCallback                                    *app_callback_ptr;
 
@@ -49,10 +51,8 @@ typedef struct EncodeContext
     EbHandle                                         total_number_of_recon_frame_mutex;
     uint64_t                                         total_number_of_recon_frames;
 
-#if ALT_REF_OVERLAY
     // Overlay input picture fifo
     EbFifo                                          *overlay_input_picture_pool_fifo_ptr;
-#endif
     // Output Buffer Fifos
     EbFifo                                        *stream_output_fifo_ptr;
     EbFifo                                        *recon_output_fifo_ptr;
@@ -124,10 +124,10 @@ typedef struct EncodeContext
 
     // Prediction Structure
     PredictionStructureGroup                       *prediction_structure_group_ptr;
-
+#if !ENABLE_CDF_UPDATE
     // MD Rate Estimation Table
     MdRateEstimationContext                        *md_rate_estimation_array;
-
+#endif
     // Rate Control Bit Tables
     RateControlTables                              *rate_control_tables_array;
     EbBool                                            rate_control_tables_array_updated;
@@ -151,9 +151,7 @@ typedef struct EncodeContext
     EbObjectWrapper                                  *previous_picture_control_set_wrapper_ptr;
     EbHandle                                          shared_reference_mutex;
 
-#if ALT_REF_OVERLAY
     uint64_t                                          picture_number_alt; // The picture number overlay includes all the overlay frames
-#endif
 } EncodeContext;
 
 typedef struct EncodeContextInitData {
@@ -164,6 +162,6 @@ typedef struct EncodeContextInitData {
  * Extern Function Declarations
  **************************************/
 extern EbErrorType encode_context_ctor(
-    EbPtr *object_dbl_ptr,
+    EncodeContext *encode_context_ptr,
     EbPtr  object_init_data_ptr);
 #endif // EbEncodeContext_h

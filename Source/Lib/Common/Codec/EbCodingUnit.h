@@ -15,6 +15,7 @@
 #include "EbTransformUnit.h"
 #include "EbCabacContextModel.h"
 #include "hash.h"
+#include "EbObject.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -159,10 +160,8 @@ extern "C" {
         int32_t weight;
     } CandidateMv;
 
-#if ATB_EC
 #define INTER_TX_SIZE_BUF_LEN 16
 #define TXK_TYPE_BUF_LEN 64
-#endif
     typedef struct MbModeInfo
     {
         // Common for both INTER and INTRA blocks
@@ -192,12 +191,8 @@ extern "C" {
         int8_t skip;
         int8_t cdef_strength;
         TxSize tx_size;
-#if ATB_EC
         uint8_t inter_tx_size[INTER_TX_SIZE_BUF_LEN];
-#endif
-#if ATB_SUPPORT
         uint8_t tx_depth;
-#endif
     } MbModeInfo;
 
     typedef struct ModeInfo {
@@ -247,7 +242,6 @@ extern "C" {
 */
     } MacroBlockPlane;
 
-#if ATB_EC
     struct buf_2d {
         uint8_t *buf;
         uint8_t *buf0;
@@ -262,7 +256,6 @@ extern "C" {
         struct buf_2d pre[2];
         uint8_t width, height;
     } MACROBLOCKD_PLANE;
-#endif
 
     typedef struct MacroBlockD
     {
@@ -290,15 +283,11 @@ extern "C" {
         MbModeInfo *left_mbmi;
         MbModeInfo *chroma_above_mbmi;
         MbModeInfo *chroma_left_mbmi;
-#if EC_UPDATE
         FRAME_CONTEXT *tile_ctx;
-#endif
-#if ATB_EC
         TXFM_CONTEXT *above_txfm_context;
         TXFM_CONTEXT *left_txfm_context;
         TXFM_CONTEXT left_txfm_context_buffer[MAX_MIB_SIZE];
         struct macroblockd_plane plane[MAX_MB_PLANE];
-#endif
     } MacroBlockD;
 
     typedef struct Macroblock
@@ -350,13 +339,7 @@ extern "C" {
 
 #if !ADD_DELTA_QP_SUPPORT
         unsigned                    qp                      : 6;
-#if !MEMORY_FOOTPRINT_OPT
-        unsigned                    ref_qp                  : 6;
-#endif
         signed                      delta_qp                : 8; // can be signed 8bits
-#if !MEMORY_FOOTPRINT_OPT
-        signed                      org_delta_qp            : 8;
-#endif
 #else
         uint16_t                    qp;
         uint16_t                    ref_qp;
@@ -385,34 +368,22 @@ extern "C" {
         PredictionMode              pred_mode;
         IntMv                       predmv[2];
         uint8_t                     skip_coeff_context;
-        int16_t                     luma_txb_skip_context;
-#if ATB_DC_CONTEXT_SUPPORT_0
-        int16_t                     luma_dc_sign_context[MAX_TXB_COUNT];
-#else
-        int16_t                     luma_dc_sign_context;
-#endif
-        int16_t                     cb_txb_skip_context;
-        int16_t                     cb_dc_sign_context;
-        int16_t                     cr_txb_skip_context;
-        int16_t                     cr_dc_sign_context;
         uint8_t                     reference_mode_context;
         uint8_t                     compoud_reference_type_context;
-#if ATB_DC_CONTEXT_SUPPORT_1
         int32_t                     quantized_dc[3][MAX_TXB_COUNT];
-#else
-        int32_t                     quantized_dc[3];
-#endif
         uint32_t                    is_inter_ctx;
         uint32_t                    interp_filters;
+        uint8_t                      segment_id;
+        uint8_t                      seg_id_predicted;  // valid only when temporal_update is enabled
         PartitionType               part;
         PART                        shape;
         uint16_t                    mds_idx;     //equivalent of leaf_index in the nscu context. we will keep both for now and use the right one on a case by case basis.
         uint8_t                    *neigh_left_recon[3];  //only for MD
         uint8_t                    *neigh_top_recon[3];
+        uint16_t                   *neigh_left_recon_16bit[3];
+        uint16_t                   *neigh_top_recon_16bit[3];
         uint32_t                    best_d1_blk;
-#if ATB_SUPPORT
         uint8_t                     tx_depth;
-#endif
     } CodingUnit;
 
         typedef struct OisCandidate
@@ -450,26 +421,20 @@ extern "C" {
 
     typedef struct LargestCodingUnit
     {
+        EbDctor                       dctor;
         struct PictureControlSet     *picture_control_set_ptr;
 
         CodingUnit                   *final_cu_arr;
-#if !MEMORY_FOOTPRINT_OPT
-        uint32_t                        tot_final_cu;
-#endif
+        uint32_t                      final_cu_count;
+        //for memory free only
+        MacroBlockD                  *av1xd;
         PartitionType                  *cu_partition_array;
-#if !MEMORY_FOOTPRINT_OPT
-        // Coding Units
-        EbAuraStatus                    aura_status_iii; // aura status for Gold 4K only, used in testing more depths
-#endif
 #if !ADD_DELTA_QP_SUPPORT
         unsigned                        qp                      : 8;
 #endif
         unsigned                        picture_left_edge_flag  : 1;
         unsigned                        picture_top_edge_flag   : 1;
         unsigned                        picture_right_edge_flag : 1;
-#if !MEMORY_FOOTPRINT_OPT
-        unsigned                        pred64                  : 2;
-#endif
         unsigned                        index                   : 12;
         unsigned                        origin_x                : 12;
         unsigned                        origin_y                : 12;
@@ -478,10 +443,6 @@ extern "C" {
         int16_t                         delta_qp;
         int16_t                         org_delta_qp;
 #endif
-#if !MEMORY_FOOTPRINT_OPT
-        //Bits only used for quantized coeffs
-        uint32_t                        quantized_coeffs_bits;
- #endif
         uint32_t                        total_bits;
 
         // Quantized Coefficients
@@ -490,7 +451,7 @@ extern "C" {
     } LargestCodingUnit;
 
     extern EbErrorType largest_coding_unit_ctor(
-        LargestCodingUnit          **larget_coding_unit_dbl_ptr,
+        LargestCodingUnit             *larget_coding_unit_ptr,
         uint8_t                        sb_sz,
         uint16_t                       sb_origin_x,
         uint16_t                       sb_origin_y,

@@ -551,7 +551,7 @@ static int32_t has_top_right(const Av1Common *cm, const MacroBlockD *xd,
     int32_t mi_row, int32_t mi_col, int32_t bs) {
     (void)xd;
     (void)cm;
-    const int32_t sb_mi_size = mi_size_wide[cm->p_pcs_ptr->sequence_control_set_ptr->sb_size];
+    const int32_t sb_mi_size = mi_size_wide[cm->p_pcs_ptr->sequence_control_set_ptr->seq_header.sb_size];
     const int32_t mask_row = mi_row & (sb_mi_size - 1);
     const int32_t mask_col = mi_col & (sb_mi_size - 1);
 
@@ -1121,6 +1121,7 @@ void generate_av1_mvp_table(
     int32_t mi_row = cu_origin_y >> MI_SIZE_LOG2;
     int32_t mi_col = cu_origin_x >> MI_SIZE_LOG2;
     Av1Common  *cm = picture_control_set_ptr->parent_pcs_ptr->av1_cm;
+    FrameHeader *frm_hdr = &picture_control_set_ptr->parent_pcs_ptr->frm_hdr;
     MacroBlockD  *xd = cu_ptr->av1xd;
     xd->n8_w = blk_geom->bwidth >> MI_SIZE_LOG2;
     xd->n8_h = blk_geom->bheight >> MI_SIZE_LOG2;
@@ -1159,8 +1160,12 @@ void generate_av1_mvp_table(
     xd->tile.mi_row_start = tile->mi_row_start;
     xd->tile.mi_row_end = tile->mi_row_end;
 
+#if INCOMPLETE_SB_FIX
+    xd->mi_stride = picture_control_set_ptr->mi_stride;
+#else
     //these could be done at init time
     xd->mi_stride = picture_control_set_ptr->parent_pcs_ptr->sequence_control_set_ptr->picture_width_in_sb*(BLOCK_SIZE_64 / 4);
+#endif
     const int32_t offset = mi_row * xd->mi_stride + mi_col;
     xd->mi = picture_control_set_ptr->mi_grid_base + offset;
 
@@ -1177,14 +1182,14 @@ void generate_av1_mvp_table(
         if (ref_frame != INTRA_FRAME) {
             zeromv[0].as_int =
                 gm_get_motion_vector(&picture_control_set_ptr->parent_pcs_ptr->global_motion[rf[0]],
-                    picture_control_set_ptr->parent_pcs_ptr->allow_high_precision_mv, bsize, mi_col, mi_row,
-                    picture_control_set_ptr->parent_pcs_ptr->cur_frame_force_integer_mv)
+                    frm_hdr->allow_high_precision_mv, bsize, mi_col, mi_row,
+                    frm_hdr->force_integer_mv)
                 .as_int;
             zeromv[1].as_int = (rf[1] != NONE_FRAME)
                 ? gm_get_motion_vector(&picture_control_set_ptr->parent_pcs_ptr->global_motion[rf[1]],
-                    picture_control_set_ptr->parent_pcs_ptr->allow_high_precision_mv,
+                    frm_hdr->allow_high_precision_mv,
                     bsize, mi_col, mi_row,
-                    picture_control_set_ptr->parent_pcs_ptr->cur_frame_force_integer_mv)
+                    frm_hdr->force_integer_mv)
                 .as_int
                 : 0;
         }
@@ -1307,7 +1312,11 @@ void update_av1_mi_map(
     const BlockGeom                *blk_geom,
     PictureControlSet            *picture_control_set_ptr)
 {
+#if INCOMPLETE_SB_FIX
+    uint32_t mi_stride = picture_control_set_ptr->mi_stride;
+#else
     uint32_t mi_stride = picture_control_set_ptr->parent_pcs_ptr->sequence_control_set_ptr->picture_width_in_sb*(BLOCK_SIZE_64 >> MI_SIZE_LOG2);
+#endif
     int32_t mi_row = cu_origin_y >> MI_SIZE_LOG2;
     int32_t mi_col = cu_origin_x >> MI_SIZE_LOG2;
 
@@ -1322,28 +1331,16 @@ void update_av1_mi_map(
             //these needed for mvPred
             {
                 miPtr[miX + miY * mi_stride].mbmi.mode = cu_ptr->pred_mode;
-#if FIX_INTRA_UV
                 miPtr[miX + miY * mi_stride].mbmi.uv_mode = cu_ptr->prediction_unit_array->intra_chroma_mode;
-#endif
                 if (cu_ptr->prediction_mode_flag == INTRA_MODE && cu_ptr->pred_mode == INTRA_MODE_4x4) {
                     miPtr[miX + miY * mi_stride].mbmi.tx_size = 0;
                     miPtr[miX + miY * mi_stride].mbmi.sb_type = BLOCK_4X4;
-#if ATB_SUPPORT
                     miPtr[miX + miY * mi_stride].mbmi.tx_depth = cu_ptr->tx_depth;
-#endif
                 }
                 else {
-#if ATB_SUPPORT
                     miPtr[miX + miY * mi_stride].mbmi.tx_size = blk_geom->txsize[cu_ptr->tx_depth][0]; // inherit tx_size from 1st transform block
-#else
-                    int32_t txb_itr;
-                    for (txb_itr = 0; txb_itr < blk_geom->txb_count; txb_itr++)
-                        miPtr[miX + miY * mi_stride].mbmi.tx_size = blk_geom->txsize[txb_itr]; // Nader - TO_DO
-#endif
                     miPtr[miX + miY * mi_stride].mbmi.sb_type = blk_geom->bsize;
-#if ATB_SUPPORT
                     miPtr[miX + miY * mi_stride].mbmi.tx_depth = cu_ptr->tx_depth;
-#endif
                 }
                 miPtr[miX + miY * mi_stride].mbmi.use_intrabc = cu_ptr->av1xd->use_intrabc;
 
@@ -1383,7 +1380,11 @@ void update_mi_map(
     PictureControlSet            *picture_control_set_ptr)
 {
     UNUSED(cu_stats);
+#if INCOMPLETE_SB_FIX
+    uint32_t mi_stride = picture_control_set_ptr->mi_stride;
+#else
     uint32_t mi_stride = picture_control_set_ptr->parent_pcs_ptr->sequence_control_set_ptr->picture_width_in_sb*(BLOCK_SIZE_64 >> MI_SIZE_LOG2);
+#endif
     int32_t mi_row = cu_origin_y >> MI_SIZE_LOG2;
     int32_t mi_col = cu_origin_x >> MI_SIZE_LOG2;
 
@@ -1398,29 +1399,17 @@ void update_mi_map(
             //these needed for mvPred
             {
                 miPtr[miX + miY * mi_stride].mbmi.mode = cu_ptr->pred_mode;
-#if FIX_INTRA_UV
                 miPtr[miX + miY * mi_stride].mbmi.uv_mode = cu_ptr->prediction_unit_array->intra_chroma_mode;
-#endif
                 if (cu_ptr->prediction_mode_flag == INTRA_MODE && cu_ptr->pred_mode == INTRA_MODE_4x4) {
                     miPtr[miX + miY * mi_stride].mbmi.tx_size = 0;
                     miPtr[miX + miY * mi_stride].mbmi.sb_type = BLOCK_4X4;
-#if ATB_SUPPORT
                     miPtr[miX + miY * mi_stride].mbmi.tx_depth = cu_ptr->tx_depth;
-#endif
                 }
                 else {
-#if ATB_SUPPORT
                     miPtr[miX + miY * mi_stride].mbmi.tx_size = blk_geom->txsize[cu_ptr->tx_depth][0]; // inherit tx_size from 1st transform block
-#else
-                    int32_t txb_itr;
-                    for (txb_itr = 0; txb_itr < blk_geom->txb_count; txb_itr++)
-                        miPtr[miX + miY * mi_stride].mbmi.tx_size = blk_geom->txsize[txb_itr]; // Nader - TO_DO
-#endif
 
                     miPtr[miX + miY * mi_stride].mbmi.sb_type = blk_geom->bsize;
-#if ATB_SUPPORT
                     miPtr[miX + miY * mi_stride].mbmi.tx_depth = cu_ptr->tx_depth;
-#endif
                 }
                 miPtr[miX + miY * mi_stride].mbmi.use_intrabc = cu_ptr->av1xd->use_intrabc;
                 miPtr[miX + miY * mi_stride].mbmi.ref_frame[0] = rf[0];
@@ -1885,7 +1874,7 @@ EbBool warped_motion_parameters(
         nsamples = select_samples(&mv, pts, pts_inref, nsamples, bsize);
     *num_samples = nsamples;
 
-    apply_wm = !find_projection(
+    apply_wm = !eb_find_projection(
         (int) nsamples,
         pts,
         pts_inref,
@@ -1973,7 +1962,7 @@ int count_overlappable_nb_left(
     return nb_count;
 }
 
-void av1_count_overlappable_neighbors(
+void eb_av1_count_overlappable_neighbors(
     const PictureControlSet        *picture_control_set_ptr,
     CodingUnit                     *cu_ptr,
     const BlockSize                   bsize,
@@ -1982,13 +1971,6 @@ void av1_count_overlappable_neighbors(
 {
     Av1Common  *cm  = picture_control_set_ptr->parent_pcs_ptr->av1_cm;
     MacroBlockD *xd = cu_ptr->av1xd;
-#if ! FIX_WARP_TILE
-    xd->mi_stride = picture_control_set_ptr->parent_pcs_ptr->sequence_control_set_ptr->picture_width_in_sb*(BLOCK_SIZE_64 / 4);
-    const int32_t offset = mi_row * xd->mi_stride + mi_col;
-    xd->mi = picture_control_set_ptr->mi_grid_base + offset;
-    xd->up_available = (mi_row > 0);
-    xd->left_available = (mi_col > 0);
-#endif
     cu_ptr->prediction_unit_array[0].overlappable_neighbors[0] = 0;
     cu_ptr->prediction_unit_array[0].overlappable_neighbors[1] = 0;
 
@@ -2103,7 +2085,7 @@ int av1_is_dv_valid(const MV dv,
     return 1;
 }
 
-IntMv av1_get_ref_mv_from_stack(int ref_idx,
+IntMv eb_av1_get_ref_mv_from_stack(int ref_idx,
     const MvReferenceFrame *ref_frame,
     int ref_mv_idx,
     CandidateMv ref_mv_stack[][MAX_REF_MV_STACK_SIZE],
@@ -2145,7 +2127,7 @@ static INLINE void lower_mv_precision(MV *mv, int allow_hp, int is_integer) {
         }
     }
 }
-void av1_find_best_ref_mvs_from_stack(int allow_hp,
+void eb_av1_find_best_ref_mvs_from_stack(int allow_hp,
     //const MB_MODE_INFO_EXT *mbmi_ext,
     CandidateMv ref_mv_stack[][MAX_REF_MV_STACK_SIZE],
     MacroBlockD * xd,
@@ -2155,8 +2137,8 @@ void av1_find_best_ref_mvs_from_stack(int allow_hp,
 {
     const int ref_idx = 0;
     MvReferenceFrame ref_frames[2] = { ref_frame, NONE_FRAME };
-    *nearest_mv = av1_get_ref_mv_from_stack(ref_idx, ref_frames, 0, ref_mv_stack/*mbmi_ext*/, xd);
+    *nearest_mv = eb_av1_get_ref_mv_from_stack(ref_idx, ref_frames, 0, ref_mv_stack/*mbmi_ext*/, xd);
     lower_mv_precision(&nearest_mv->as_mv, allow_hp, is_integer);
-    *near_mv = av1_get_ref_mv_from_stack(ref_idx, ref_frames, 1, ref_mv_stack/*mbmi_ext*/, xd);
+    *near_mv = eb_av1_get_ref_mv_from_stack(ref_idx, ref_frames, 1, ref_mv_stack/*mbmi_ext*/, xd);
     lower_mv_precision(&near_mv->as_mv, allow_hp, is_integer);
 }

@@ -289,6 +289,43 @@ extern "C" {
         return tx_size_wide_log2[tx_size] - tx_size_wide_log2[0];
     }
 
+
+    #define BLOCK_SIZES_ALL 22
+    static INLINE int is_rect_tx(TxSize tx_size) { return tx_size >= TX_SIZES; }
+    static INLINE int is_rect_tx_allowed_bsize(BlockSize bsize) {
+        static const char LUT[BLOCK_SIZES_ALL] = {
+          0,  // BLOCK_4X4
+          1,  // BLOCK_4X8
+          1,  // BLOCK_8X4
+          0,  // BLOCK_8X8
+          1,  // BLOCK_8X16
+          1,  // BLOCK_16X8
+          0,  // BLOCK_16X16
+          1,  // BLOCK_16X32
+          1,  // BLOCK_32X16
+          0,  // BLOCK_32X32
+          1,  // BLOCK_32X64
+          1,  // BLOCK_64X32
+          0,  // BLOCK_64X64
+          0,  // BLOCK_64X128
+          0,  // BLOCK_128X64
+          0,  // BLOCK_128X128
+          1,  // BLOCK_4X16
+          1,  // BLOCK_16X4
+          1,  // BLOCK_8X32
+          1,  // BLOCK_32X8
+          1,  // BLOCK_16X64
+          1,  // BLOCK_64X16
+        };
+
+        return LUT[bsize];
+    }
+    static INLINE int is_rect_tx_allowed(/*const MacroBlockD *xd,*/
+        const MbModeInfo *mbmi) {
+        return is_rect_tx_allowed_bsize(mbmi->sb_type) /*&&
+            !xd->lossless[mbmi->segment_id]*/;
+    }
+
     static const int8_t iadst4_range[7] = { 0, 1, 0, 0, 0, 0, 0 };
 
     // sum of fwd_shift_##
@@ -3878,6 +3915,81 @@ extern "C" {
     }
     static const uint32_t q_func[] = { 26214,23302,20560,18396,16384,14564 };
 
+    extern const int32_t eb_av1_cospi_arr_data[7][64];
+    extern const int32_t eb_av1_sinpi_arr_data[7][5];
+    extern const int8_t *eb_inv_txfm_shift_ls[TX_SIZES_ALL];
+
+    static const int32_t cos_bit_min = 10;
+
+    static const int32_t NewSqrt2Bits = 12;
+    // 2^12 * sqrt(2)
+    static const int32_t NewSqrt2 = 5793;
+    // 2^12 / sqrt(2)
+    static const int32_t NewInvSqrt2 = 2896;
+
+    static INLINE const int32_t *cospi_arr(int32_t n) {
+        return eb_av1_cospi_arr_data[n - cos_bit_min];
+    }
+
+    static INLINE const int32_t *sinpi_arr(int32_t n) {
+        return eb_av1_sinpi_arr_data[n - cos_bit_min];
+    }
+
+    static INLINE void get_flip_cfg(TxType tx_type, int32_t *ud_flip, int32_t *lr_flip) {
+        switch (tx_type) {
+        case DCT_DCT:
+        case ADST_DCT:
+        case DCT_ADST:
+        case ADST_ADST:
+            *ud_flip = 0;
+            *lr_flip = 0;
+            break;
+        case IDTX:
+        case V_DCT:
+        case H_DCT:
+        case V_ADST:
+        case H_ADST:
+            *ud_flip = 0;
+            *lr_flip = 0;
+            break;
+        case FLIPADST_DCT:
+        case FLIPADST_ADST:
+        case V_FLIPADST:
+            *ud_flip = 1;
+            *lr_flip = 0;
+            break;
+        case DCT_FLIPADST:
+        case ADST_FLIPADST:
+        case H_FLIPADST:
+            *ud_flip = 0;
+            *lr_flip = 1;
+            break;
+        case FLIPADST_FLIPADST:
+            *ud_flip = 1;
+            *lr_flip = 1;
+            break;
+        default:
+            *ud_flip = 0;
+            *lr_flip = 0;
+            assert(0);
+        }
+    }
+
+    static INLINE int32_t get_rect_tx_log_ratio(int32_t col, int32_t row) {
+        if (col == row) return 0;
+        if (col > row) {
+            if (col == row * 2) return 1;
+            if (col == row * 4) return 2;
+            assert(0 && "Unsupported transform size");
+        }
+        else {
+            if (row == col * 2) return -1;
+            if (row == col * 4) return -2;
+            assert(0 && "Unsupported transform size");
+        }
+        return 0;  // Invalid
+    }
+
     extern EbErrorType encode_transform(
         int16_t             *residual_buffer,
         uint32_t             residual_stride,
@@ -3903,11 +4015,7 @@ extern "C" {
         EbAsm                asm_type,
         PlaneType           component_type,
         EB_TRANS_COEFF_SHAPE trans_coeff_shape);
-#if DC_SIGN_CONTEXT_FIX
     extern int32_t av1_quantize_inv_quantize(
-#else
-    extern void av1_quantize_inv_quantize(
-#endif
         PictureControlSet             *picture_control_set_ptr,
         ModeDecisionContext           *md_context,
         int32_t                       *coeff,
@@ -3915,15 +4023,13 @@ extern "C" {
         int32_t                       *quant_coeff,
         int32_t                       *recon_coeff,
         uint32_t                       qp,
+        int32_t              segmentation_qp_offset,
         uint32_t                       width,
         uint32_t                       height,
         TxSize                         txsize,
         uint16_t                      *eob,
         EbAsm                          asm_type,
         uint32_t                      *y_count_non_zero_coeffs,
-#if !PF_N2_SUPPORT
-        EbPfMode                       pf_mode,
-#endif
         uint32_t                       component_type,
         uint32_t                       bit_increment,
         TxType                         tx_type,
@@ -3931,9 +4037,7 @@ extern "C" {
         int16_t                        txb_skip_context,
         int16_t                        dc_sign_context,
         PredictionMode                 pred_mode,
-#if RDOQ_INTRA
         EbBool                         is_intra_bc,
-#endif
         EbBool                         is_encode_pass);
 
     extern EbErrorType av1_estimate_inv_transform(

@@ -9,6 +9,7 @@
 #include "EbDefinitions.h"
 #include "EbSystemResourceManager.h"
 #include "EbDefinitions.h"
+#include "EbObject.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -17,6 +18,7 @@ extern "C" {
      ***************************************/
     typedef struct ResourceCoordinationContext
     {
+        EbDctor                               dctor;
         EbFifo                                *input_buffer_fifo_ptr;
         EbFifo                                *resource_coordination_results_output_fifo_ptr;
         EbFifo                               **picture_control_set_fifo_ptr_array;
@@ -26,11 +28,7 @@ extern "C" {
         EbCallback                           **app_callback_ptr_array;
 
         // Compute Segments
-#if MEM_MAP_OPT
         uint32_t                               compute_segments_total_count_array;
-#else
-        uint32_t                              *compute_segments_total_count_array;
-#endif
         uint32_t                               encode_instances_total_count;
 
         // Picture Number Array
@@ -62,18 +60,14 @@ extern "C" {
      * Extern Function Declaration
      ***************************************/
     extern EbErrorType resource_coordination_context_ctor(
-        ResourceCoordinationContext  **context_dbl_ptr,
+        ResourceCoordinationContext  *context_ptr,
         EbFifo                        *input_buffer_fifo_ptr,
         EbFifo                        *resource_coordination_results_output_fifo_ptr,
         EbFifo                       **picture_control_set_fifo_ptr_array,
         EbSequenceControlSetInstance **sequence_control_set_instance_array,
         EbFifo                        *sequence_control_set_empty_fifo_ptr,
         EbCallback                   **app_callback_ptr_array,
-#if MEM_MAP_OPT
         uint32_t                       compute_segments_total_count_array,
-#else
-        uint32_t                      *compute_segments_total_count_array,
-#endif
         uint32_t                       encode_instances_total_count);
 
     extern void* resource_coordination_kernel(void *input_ptr);
